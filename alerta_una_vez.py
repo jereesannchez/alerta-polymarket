@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Version para GitHub Actions: consulta el precio UNA vez, avisa por ntfy
-si Flavio bajo de 80% y guarda el estado en estado.txt para no repetir avisos.
+si Flavio bajo de 75% y guarda el estado en estado.txt para no repetir avisos.
+Si lo corres a mano (Run workflow), ademas manda una notificacion de PRUEBA.
 """
 
 import json
@@ -9,9 +10,9 @@ import os
 import urllib.request
 
 MARKET_SLUG = "will-flvio-bolsonaro-win-the-2026-brazilian-presidential-election"
-NTFY_TOPIC = os.environ["NTFY_TOPIC"]   # viene de un "secret" de GitHub
-UMBRAL = 0.80   # avisa si baja de 80%
-REARME = 0.82   # se vuelve a armar si sube de 82%
+NTFY_TOPIC = os.environ["NTFY_TOPIC"].strip()   # viene de un "secret" de GitHub
+UMBRAL = 0.75   # avisa si baja de 75%
+REARME = 0.77   # se vuelve a armar si sube de 77%
 ESTADO = "estado.txt"
 
 API_URL = f"https://gamma-api.polymarket.com/markets?slug={MARKET_SLUG}"
@@ -40,7 +41,8 @@ def notificar(titulo, mensaje, prioridad="urgent", tags="rotating_light"):
         headers={"Title": titulo, "Priority": prioridad, "Tags": tags},
         method="POST",
     )
-    urllib.request.urlopen(req, timeout=20)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        print("ntfy respondio:", r.status)
 
 
 def leer_estado():
@@ -60,6 +62,17 @@ def main():
     precio = obtener_precio_si()
     estado = leer_estado()
     print(f"Flavio: {precio:.1%} | estado: {estado}")
+    print(f"Largo del topic: {len(NTFY_TOPIC)} caracteres")
+
+    # Prueba: solo cuando se corre a mano desde Actions
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+        notificar(
+            "Prueba de alarma OK",
+            f"Si ves esto, las notificaciones andan. Flavio esta en {precio:.1%}, "
+            f"aviso si baja de {UMBRAL:.0%}.",
+            prioridad="default",
+            tags="white_check_mark",
+        )
 
     if estado == "armada" and precio < UMBRAL:
         notificar(
